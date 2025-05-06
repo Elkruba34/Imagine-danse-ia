@@ -7,8 +7,9 @@ index.html
      <link rel="stylesheet" href="style.css">
    </head>
    <body>
-     <img id="dancer" src="assets/danseur.jpg">
+     <img id="dancer" src="assets/danseur.jpg" style="width:300px">
      <audio id="music" src="assets/musique.mp3" controls></audio>
+     
      <script src="script.js"></script>
    </body>
    </html>
