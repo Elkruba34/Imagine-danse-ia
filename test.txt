@@ -1,0 +1,350 @@
+// Dancing Image AI - Prototype conceptuel
+// Ce code est une démonstration du concept et nécessiterait des bibliothèques supplémentaires
+// pour une implémentation complète
+
+// --- 1. Analyse Audio ---
+class AudioAnalyzer {
+  constructor(audioElement) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    this.audioContext = new AudioContext();
+    this.source = this.audioContext.createMediaElementSource(audioElement);
+    this.analyzer = this.audioContext.createAnalyser();
+    
+    // Configuration de l'analyseur
+    this.analyzer.fftSize = 256;
+    this.bufferLength = this.analyzer.frequencyBinCount;
+    this.dataArray = new Uint8Array(this.bufferLength);
+    
+    // Connexion des nœuds audio
+    this.source.connect(this.analyzer);
+    this.analyzer.connect(this.audioContext.destination);
+  }
+  
+  getBeatInfo() {
+    this.analyzer.getByteFrequencyData(this.dataArray);
+    
+    // Analyse simplifiée des fréquences pour détecter les battements
+    const bassValue = this.getAverageFrequency(0, 10);  // Basses fréquences (battements)
+    const midValue = this.getAverageFrequency(10, 100); // Fréquences moyennes (voix)
+    const highValue = this.getAverageFrequency(100, 255); // Hautes fréquences
+    
+    return {
+      bass: bassValue / 255,  // Normalisé entre 0 et 1
+      mid: midValue / 255,
+      high: highValue / 255,
+      overall: this.getAverageFrequency(0, 255) / 255
+    };
+  }
+  
+  getAverageFrequency(start, end) {
+    let sum = 0;
+    for (let i = start; i < end; i++) {
+      sum += this.dataArray[i];
+    }
+    return sum / (end - start);
+  }
+}
+
+// --- 2. Analyse des paroles (version simplifiée) ---
+class LyricsAnalyzer {
+  constructor(lyricsData) {
+    this.lyrics = lyricsData;
+    this.currentIndex = 0;
+  }
+  
+  // Fonction qui retourne les paroles actuelles en fonction du temps
+  getCurrentLyrics(currentTime) {
+    // Cherche dans le tableau de paroles synchronisées
+    for (let i = 0; i < this.lyrics.length; i++) {
+      if (currentTime >= this.lyrics[i].startTime && currentTime <= this.lyrics[i].endTime) {
+        this.currentIndex = i;
+        return this.lyrics[i];
+      }
+    }
+    return null;
+  }
+  
+  // Analyse simplifiée du sentiment des paroles
+  analyzeSentiment(text) {
+    // Cette fonction devrait utiliser un modèle NLP pour l'analyse de sentiment
+    // Ici, c'est une version très simplifiée basée sur des mots-clés
+    const happyWords = ["heureux", "joie", "sourire", "danser", "rire", "amour", "happy", "love"];
+    const sadWords = ["triste", "pleurer", "larme", "douleur", "souffrir", "sad", "pain"];
+    const energeticWords = ["courir", "sauter", "fort", "énergie", "puissant", "jump", "power"];
+    
+    text = text.toLowerCase();
+    
+    let score = {
+      happy: 0,
+      sad: 0,
+      energetic: 0
+    };
+    
+    happyWords.forEach(word => {
+      if (text.includes(word)) score.happy += 1;
+    });
+    
+    sadWords.forEach(word => {
+      if (text.includes(word)) score.sad += 1;
+    });
+    
+    energeticWords.forEach(word => {
+      if (text.includes(word)) score.energetic += 1;
+    });
+    
+    return score;
+  }
+}
+
+// --- 3. Animateur d'images ---
+class ImageAnimator {
+  constructor(imageElement) {
+    this.image = imageElement;
+    this.baseX = 0;
+    this.baseY = 0;
+    this.lastBeatTime = 0;
+    this.animations = {
+      bounce: this.bounce.bind(this),
+      shake: this.shake.bind(this),
+      rotate: this.rotate.bind(this),
+      pulse: this.pulse.bind(this),
+      wave: this.wave.bind(this)
+    };
+  }
+  
+  // Réinitialiser la position de l'image
+  resetPosition() {
+    gsap.to(this.image, {
+      x: this.baseX,
+      y: this.baseY,
+      rotation: 0,
+      scale: 1,
+      duration: 0.3
+    });
+  }
+  
+  // Différentes animations basées sur l'audio et les paroles
+  bounce(intensity) {
+    gsap.to(this.image, {
+      y: this.baseY - 50 * intensity,
+      duration: 0.2,
+      ease: "power1.out",
+      onComplete: () => {
+        gsap.to(this.image, {
+          y: this.baseY,
+          duration: 0.3,
+          ease: "bounce.out"
+        });
+      }
+    });
+  }
+  
+  shake(intensity) {
+    gsap.to(this.image, {
+      x: this.baseX + (Math.random() - 0.5) * 20 * intensity,
+      y: this.baseY + (Math.random() - 0.5) * 20 * intensity,
+      duration: 0.1,
+      onComplete: () => this.resetPosition()
+    });
+  }
+  
+  rotate(intensity) {
+    gsap.to(this.image, {
+      rotation: (Math.random() - 0.5) * 30 * intensity,
+      duration: 0.3,
+      onComplete: () => this.resetPosition()
+    });
+  }
+  
+  pulse(intensity) {
+    gsap.to(this.image, {
+      scale: 1 + 0.2 * intensity,
+      duration: 0.2,
+      yoyo: true,
+      repeat: 1
+    });
+  }
+  
+  wave(intensity) {
+    const timeline = gsap.timeline();
+    timeline.to(this.image, {
+      rotation: 15 * intensity,
+      duration: 0.2
+    }).to(this.image, {
+      rotation: -15 * intensity,
+      duration: 0.4
+    }).to(this.image, {
+      rotation: 0,
+      duration: 0.2
+    });
+  }
+  
+  // Méthode principale qui décide quelle animation jouer en fonction de l'audio et des paroles
+  animate(beatInfo, lyricsInfo, currentTime) {
+    // Si un beat fort est détecté et qu'assez de temps s'est écoulé depuis le dernier
+    if (beatInfo.bass > 0.7 && currentTime - this.lastBeatTime > 0.3) {
+      this.lastBeatTime = currentTime;
+      this.bounce(beatInfo.bass);
+    }
+    
+    // Animation basée sur le volume global
+    if (beatInfo.overall > 0.6) {
+      this.pulse(beatInfo.overall);
+    }
+    
+    // Animation basée sur les fréquences moyennes (voix)
+    if (beatInfo.mid > 0.5) {
+      this.rotate(beatInfo.mid * 0.5);
+    }
+    
+    // Si nous avons des informations sur les paroles
+    if (lyricsInfo) {
+      const sentiment = lyricsInfo.sentiment;
+      
+      if (sentiment.happy > 0) {
+        this.bounce(0.5 * sentiment.happy);
+      }
+      
+      if (sentiment.energetic > 0) {
+        this.shake(0.5 * sentiment.energetic);
+      }
+      
+      if (sentiment.sad > 0) {
+        this.wave(0.5 * sentiment.sad);
+      }
+    }
+  }
+}
+
+// --- 4. Intégration ---
+class DancingImageAI {
+  constructor(options) {
+    this.audioElement = options.audioElement;
+    this.imageElement = options.imageElement;
+    this.lyricsData = options.lyricsData || [];
+    
+    this.audioAnalyzer = new AudioAnalyzer(this.audioElement);
+    this.lyricsAnalyzer = new LyricsAnalyzer(this.lyricsData);
+    this.imageAnimator = new ImageAnimator(this.imageElement);
+    
+    this.isPlaying = false;
+    this.animationFrameId = null;
+  }
+  
+  start() {
+    this.isPlaying = true;
+    this.animate();
+    this.audioElement.play();
+  }
+  
+  stop() {
+    this.isPlaying = false;
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+    this.audioElement.pause();
+    this.imageAnimator.resetPosition();
+  }
+  
+  animate() {
+    if (!this.isPlaying) return;
+    
+    const currentTime = this.audioElement.currentTime;
+    const beatInfo = this.audioAnalyzer.getBeatInfo();
+    
+    // Obtenir les paroles actuelles
+    const currentLyrics = this.lyricsAnalyzer.getCurrentLyrics(currentTime);
+    let lyricsInfo = null;
+    
+    if (currentLyrics) {
+      // Analyser le sentiment des paroles
+      const sentiment = this.lyricsAnalyzer.analyzeSentiment(currentLyrics.text);
+      lyricsInfo = {
+        text: currentLyrics.text,
+        sentiment: sentiment
+      };
+    }
+    
+    // Animer l'image
+    this.imageAnimator.animate(beatInfo, lyricsInfo, currentTime);
+    
+    // Continuer l'animation
+    this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
+  }
+}
+
+// --- 5. Exemple d'utilisation ---
+// Note: Ce code nécessiterait des bibliothèques comme GSAP et devrait être utilisé dans un environnement web
+
+// Structure des paroles synchronisées avec le temps
+const sampleLyricsData = [
+  { startTime: 0, endTime: 4, text: "Exemple de paroles pour la démo" },
+  { startTime: 5, endTime: 9, text: "Ces paroles vont faire danser l'image" },
+  { startTime: 10, endTime: 14, text: "Avec énergie et joie" },
+  { startTime: 15, endTime: 19, text: "Pour montrer le concept de l'IA dansante" }
+];
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', () => {
+  const audioElement = document.getElementById('music');
+  const imageElement = document.getElementById('dancing-image');
+  
+  const dancingAI = new DancingImageAI({
+    audioElement: audioElement,
+    imageElement: imageElement,
+    lyricsData: sampleLyricsData
+  });
+  
+  // Boutons de contrôle
+  document.getElementById('start-button').addEventListener('click', () => {
+    dancingAI.start();
+  });
+  
+  document.getElementById('stop-button').addEventListener('click', () => {
+    dancingAI.stop();
+  });
+});
+
+// Note: HTML nécessaire pour ce code
+/*
+<audio id="music" src="chemin/vers/votre/musique.mp3"></audio>
+<div class="container">
+  <img id="dancing-image" src="chemin/vers/votre/image.jpg">
+</div>
+<div class="controls">
+  <button id="start-button">Démarrer</button>
+  <button id="stop-button">Arrêter</button>
+</div>
+*/
+
+// Styles CSS suggérés
+/*
+.container {
+  position: relative;
+  width: 500px;
+  height: 500px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+#dancing-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.controls {
+  text-align: center;
+  margin-top: 20px;
+}
+
+button {
+  padding: 10px 20px;
+  margin: 0 10px;
+  font-size: 16px;
+  cursor: pointer;
+}
+*/
